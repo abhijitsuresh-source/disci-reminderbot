@@ -20,7 +20,7 @@ async function parseReminder(text) {
   const now = new Date();
   const prompt = `You are Disci, a reminder assistant. Parse this reminder request and return structured data.
 
-TODAY: ${now.toISOString()}
+TODAY: ${now.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} (IST, UTC+5:30)
 USER INPUT: "${text}"
 
 Rules:
