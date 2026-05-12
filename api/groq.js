@@ -24,20 +24,29 @@ TODAY: ${now.toISOString()}
 USER INPUT: "${text}"
 
 Rules:
-- Extract the task title (concise, max 80 chars). If the user says "I have an exam", the title is "Exam". If they say "meeting with John", the title is "Meeting with John". Always infer a clear action-oriented title even if not explicitly stated.
+- CRITICAL: Only extract a reminder if the input clearly describes a task/event AND a time/deadline. If the input is ambiguous, incomplete, or does not contain a recognisable task (e.g. just a time like "4pm", a single word, or unrelated chat), return {"confident": false} and nothing else.
+- Extract the task title verbatim from what the user said (max 80 chars). Do NOT invent or infer a task the user did not mention. If they said "take medicine", the title is "Take medicine". Do NOT change it to "Doctor appointment" or anything else.
 - Parse the deadline as an ISO date. If no year given, assume current year. If the date has already passed this year, use next year. If "end of year" use Dec 31. If month only use last day of that month. Always return a full ISO datetime string.
-- Assign priority 1-10 based on: exams/health/legal/financial = 7-10, professional tasks = 5-6, personal errands = 3-4, optional = 1-2
-- Calculate how many notifications will be sent based on priority and days until deadline: priority 9-10 = every 2 days + daily last 14 days, priority 7-8 = twice a week + daily last 7 days, priority 5-6 = 4-5 total, priority 3-4 = 2-3 total, priority 1-2 = 1 total
+- Priority is STRICTLY determined by category — do not vary it:
+    * Medicine / health / medical appointments = 8
+    * Exams / legal deadlines / financial deadlines = 9
+    * Work meetings / professional tasks = 6
+    * Personal errands / chores = 4
+    * Optional / low-stakes = 2
+  Use exactly these values. Do not adjust based on phrasing or wording.
+- Calculate notif_count based on priority and days until deadline: priority 9-10 = every 2 days + daily last 14 days, priority 7-8 = twice a week + daily last 7 days, priority 5-6 = 4-5 total, priority 3-4 = 2-3 total, priority 1-2 = 1 total
 - Write a short priority_reason (1 sentence, conversational tone)
 - If you cannot determine a deadline at all, return deadline as null
+- If the input is not a reminder request (greeting, question, random text), return {"confident": false}
 
 Respond ONLY with valid JSON, no markdown:
 {
+  "confident": true,
   "title": "task title",
   "deadline": "ISO date string or null",
   "priority": 7,
   "notif_count": 12,
-  "priority_reason": "I'm rating this a 7 — exams are high stakes."
+  "priority_reason": "I'm rating this an 8 — taking medicine on time is a health matter."
 }`;
 
   const data = await groq(prompt);
@@ -106,7 +115,7 @@ async function groq(prompt) {
   const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: MODEL, messages: [{ role: 'user', content: prompt }], temperature: 0.7, max_tokens: 400 })
+    body: JSON.stringify({ model: MODEL, messages: [{ role: 'user', content: prompt }], temperature: 0, max_tokens: 400 })
   });
   if (!r.ok) throw new Error(`Groq ${r.status}`);
   return r.json();
