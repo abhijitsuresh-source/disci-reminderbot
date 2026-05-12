@@ -62,6 +62,114 @@ function daysLeft(deadline) {
   return `${Math.floor(d/365)} years left`;
 }
 
+// ── CLIENT-SIDE SCHEDULE CALCULATION (mirrors api/create-reminder.js) ─────────
+function schedAddDays(date, days) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  d.setHours(9, 0, 0, 0);
+  return d;
+}
+function schedAddHours(date, hours) {
+  const d = new Date(date);
+  d.setHours(d.getHours() + hours);
+  return d;
+}
+function schedAddMinutes(date, minutes) {
+  return new Date(date.getTime() + minutes * 60000);
+}
+
+function calculateClientSchedule(priority, deadline) {
+  const now = new Date();
+  const deadlineDate = new Date(deadline);
+  const totalDays = Math.floor((deadlineDate - now) / 86400000);
+  const dates = [];
+  const fiveMinBefore = schedAddMinutes(deadlineDate, -5);
+  const minutesUntilEvent = Math.floor((deadlineDate - now) / 60000);
+
+  if (totalDays === 0) {
+    const t = new Date(deadlineDate);
+    if (priority >= 9) {
+      if (minutesUntilEvent >= 240) dates.push(schedAddMinutes(t, -240));
+      if (minutesUntilEvent >= 120) dates.push(schedAddMinutes(t, -120));
+      if (minutesUntilEvent >= 60)  dates.push(schedAddMinutes(t, -60));
+      if (minutesUntilEvent >= 30)  dates.push(schedAddMinutes(t, -30));
+      if (minutesUntilEvent >= 15)  dates.push(schedAddMinutes(t, -15));
+      if (minutesUntilEvent >= 10)  dates.push(schedAddMinutes(t, -10));
+    } else if (priority >= 7) {
+      if (minutesUntilEvent >= 120) dates.push(schedAddMinutes(t, -120));
+      if (minutesUntilEvent >= 60)  dates.push(schedAddMinutes(t, -60));
+      if (minutesUntilEvent >= 30)  dates.push(schedAddMinutes(t, -30));
+    } else if (priority >= 5) {
+      if (minutesUntilEvent >= 60)  dates.push(schedAddMinutes(t, -60));
+      if (minutesUntilEvent >= 15)  dates.push(schedAddMinutes(t, -15));
+    } else if (priority >= 3) {
+      if (minutesUntilEvent >= 30)  dates.push(schedAddMinutes(t, -30));
+    }
+    dates.push(fiveMinBefore);
+    dates.push(t);
+  } else {
+    if (priority >= 9) {
+      dates.push(schedAddHours(now, 1));
+      if (totalDays > 14) {
+        for (let d = 2; d <= totalDays - 14; d += 2) dates.push(schedAddDays(now, d));
+      }
+      const finalStart = Math.max(totalDays - 14, 1);
+      for (let d = finalStart; d <= totalDays; d++) dates.push(schedAddDays(now, d));
+    } else if (priority >= 7) {
+      if (totalDays >= 1) dates.push(schedAddDays(now, 1));
+      if (totalDays > 7) {
+        const midWindow = totalDays - 7;
+        const step = Math.max(3, Math.floor(midWindow / 4));
+        for (let d = Math.ceil(midWindow / 4); d <= midWindow; d += step) dates.push(schedAddDays(now, d));
+      }
+      const finalStart = Math.max(totalDays - 7, 2);
+      for (let d = finalStart; d <= totalDays; d++) dates.push(schedAddDays(now, d));
+    } else if (priority >= 5) {
+      const slots = [
+        totalDays >= 14 ? totalDays - 14 : null,
+        totalDays >= 7  ? totalDays - 7  : null,
+        totalDays >= 3  ? totalDays - 3  : null,
+        totalDays >= 1  ? totalDays - 1  : null,
+        totalDays
+      ];
+      slots.forEach(d => d !== null && dates.push(schedAddDays(now, d)));
+    } else if (priority >= 3) {
+      if (totalDays >= 4) dates.push(schedAddDays(now, Math.floor(totalDays / 2)));
+      if (totalDays >= 2) dates.push(schedAddDays(now, totalDays - 1));
+      dates.push(schedAddDays(now, totalDays));
+    } else {
+      dates.push(schedAddDays(now, totalDays));
+    }
+    if (fiveMinBefore > now) dates.push(fiveMinBefore);
+  }
+
+  const unique = [...new Set(dates.map(d => d.toISOString()))].map(d => new Date(d));
+  return unique.filter(d => d > now).sort((a, b) => a - b);
+}
+
+function formatNudgeSchedule(dates) {
+  const now = new Date();
+  return dates.map((d, i) => {
+    const diffMs = d - now;
+    const diffMins = Math.round(diffMs / 60000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    let when;
+    if (diffMins < 60) {
+      when = `in ${diffMins} min`;
+    } else if (diffMins < 120) {
+      when = `in 1 hour`;
+    } else if (diffDays === 0) {
+      when = `today at ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+    } else if (diffDays === 1) {
+      when = `tomorrow at ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+    } else {
+      when = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) +
+             ` at ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+    }
+    return `<span class="nudge-item">nudge ${i + 1} — ${when}</span>`;
+  }).join('\n');
+}
+
 // ── CHAT RENDERING ────────────────────────────────────────────────────────────
 function addMessage(from, content, opts = {}) {
   const area = document.getElementById('chat-area');
@@ -641,7 +749,6 @@ async function handleNewReminder(text, imageData = null) {
       const fallback = new Date();
       fallback.setDate(fallback.getDate() + 7);
       parsed.deadline = fallback.toISOString();
-      parsed.notif_count = parsed.notif_count || 3;
       parsed.priority = parsed.priority || 5;
       parsed.priority_reason = parsed.priority_reason || "I set a default deadline of 7 days — let me know if you want to change it.";
     }
@@ -651,11 +758,16 @@ async function handleNewReminder(text, imageData = null) {
       return;
     }
 
+    // Calculate actual schedule client-side (same logic as server)
+    const clientSchedule = calculateClientSchedule(parsed.priority, parsed.deadline);
+    parsed._clientSchedule = clientSchedule;
+
     pendingReminder = parsed;
 
     const color = P_COLOR[parsed.priority];
     const label = P_LABEL[parsed.priority];
     const deadlineFormatted = new Date(parsed.deadline).toLocaleDateString('en-IN', { day:'numeric', month:'long', year:'numeric' });
+    const nudgeList = formatNudgeSchedule(clientSchedule);
 
     await botSay(
       `Got it. Here's what I've set up:\n\n` +
@@ -664,8 +776,10 @@ async function handleNewReminder(text, imageData = null) {
       `<div class="rcb-meta">` +
       `<span>📅 ${deadlineFormatted}</span>` +
       `<span>🎯 Priority <span class="p-chip" style="background:${color}">${parsed.priority} — ${label}</span></span>` +
-      `<span>🔔 ${parsed.notif_count} nudges scheduled</span>` +
-      `</div></div>\n\n` +
+      `<span>🔔 ${clientSchedule.length} nudges scheduled</span>` +
+      `</div>` +
+      `<div class="rcb-nudge-list">${nudgeList}</div>` +
+      `</div>\n\n` +
       `${parsed.priority_reason}\n\nDoes that look right?`
     );
 
@@ -719,8 +833,14 @@ async function handleConfirm() {
 
     if (!data.success) throw new Error(data.error);
 
+    const savedSchedule = pendingReminder._clientSchedule || [];
     pendingReminder = null;
-    await botSay(`Done ✅ Saved. I've scheduled ${data.notifications_scheduled} nudges leading up to the deadline.\n\nYou can lie to me — but you already know what this one means.`);
+
+    const nudgeListSaved = savedSchedule.length > 0
+      ? `\n\n<div class="rcb-nudge-list saved-nudges">${formatNudgeSchedule(savedSchedule)}</div>`
+      : '';
+
+    await botSay(`Done ✅ Saved. Here's when I'll nudge you:${nudgeListSaved}\n\nYou can lie to me — but you already know what this one means.`);
     setQuickReplies([
       { label: '📝 Add another' },
       { label: '📋 Show my reminders' },

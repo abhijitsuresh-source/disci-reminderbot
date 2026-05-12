@@ -37,7 +37,6 @@ Rules:
     * Personal errands / chores = 4
     * Optional / low-stakes = 2
   Use exactly these values. Do not adjust based on phrasing or wording.
-- Calculate notif_count based on priority and days until deadline: priority 9-10 = every 2 days + daily last 14 days, priority 7-8 = twice a week + daily last 7 days, priority 5-6 = 4-5 total, priority 3-4 = 2-3 total, priority 1-2 = 1 total
 - Write a short priority_reason (1 sentence, conversational tone). If the title is generic (no specific task mentioned), set priority_reason to "I set a default priority — let me know if you'd like to change it." Do NOT invent a category.
 - If you cannot determine a deadline at all, return deadline as null
 - If the input is not a reminder request (greeting, question, random text), return {"confident": false}
@@ -48,7 +47,6 @@ Respond ONLY with valid JSON, no markdown:
   "title": "task title",
   "deadline": "ISO date string or null",
   "priority": 7,
-  "notif_count": 12,
   "priority_reason": "I'm rating this an 8 — taking medicine on time is a health matter."
 }`;
 
