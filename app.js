@@ -149,22 +149,30 @@ function calculateClientSchedule(priority, deadline) {
 
 function formatNudgeSchedule(dates) {
   const now = new Date();
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const timeFmt = d => d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: tz });
+  const dateFmt = d => d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: tz });
+
+  // Compare calendar dates in local timezone
+  const localDateStr = d => d.toLocaleDateString('en-IN', { timeZone: tz });
+  const todayStr = localDateStr(now);
+  const tomorrowStr = localDateStr(new Date(now.getTime() + 86400000));
+
   return dates.map((d, i) => {
     const diffMs = d - now;
     const diffMins = Math.round(diffMs / 60000);
-    const diffDays = Math.floor(diffMs / 86400000);
+    const dStr = localDateStr(d);
     let when;
     if (diffMins < 60) {
       when = `in ${diffMins} min`;
     } else if (diffMins < 120) {
       when = `in 1 hour`;
-    } else if (diffDays === 0) {
-      when = `today at ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`;
-    } else if (diffDays === 1) {
-      when = `tomorrow at ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+    } else if (dStr === todayStr) {
+      when = `today at ${timeFmt(d)}`;
+    } else if (dStr === tomorrowStr) {
+      when = `tomorrow at ${timeFmt(d)}`;
     } else {
-      when = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) +
-             ` at ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+      when = `${dateFmt(d)} at ${timeFmt(d)}`;
     }
     return `<span class="nudge-item">nudge ${i + 1} — ${when}</span>`;
   }).join('\n');
