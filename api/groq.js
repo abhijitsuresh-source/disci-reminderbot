@@ -24,7 +24,10 @@ TODAY: ${now.toISOString()}
 USER INPUT: "${text}"
 
 Rules:
-- CRITICAL: Only extract a reminder if the input clearly describes a task/event AND a time/deadline. If the input is ambiguous, incomplete, or does not contain a recognisable task (e.g. just a time like "4pm", a single word, or unrelated chat), return {"confident": false} and nothing else.
+- CRITICAL: Only return {"confident": false} if the input has NO time or deadline whatsoever, or is clearly unrelated chat (e.g. "hello", "how are you", "what is 2+2"). 
+- If the input has a time/date but no task (e.g. "remind me at 7pm", "set a reminder for 4pm today"), set the title to "Reminder" — do not invent a task.
+- If the input has both a task and a time, extract both as normal
+- Extract the date and time verbatim from what the user said.
 - Extract the task title verbatim from what the user said (max 80 chars). Do NOT invent or infer a task the user did not mention. If they said "take medicine", the title is "Take medicine". Do NOT change it to "Doctor appointment" or anything else.
 - Parse the deadline as an ISO date. If no year given, assume current year. If the date has already passed this year, use next year. If "end of year" use Dec 31. If month only use last day of that month. Always return a full ISO datetime string.
 - Priority is STRICTLY determined by category — do not vary it:
