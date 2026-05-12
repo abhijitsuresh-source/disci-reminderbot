@@ -47,7 +47,7 @@ Respond ONLY with valid JSON, no markdown:
   "title": "task title",
   "deadline": "ISO date string or null",
   "priority": 7,
-  "priority_reason": "I'm rating this an 8 — taking medicine on time is a health matter."
+  "priority_reason": "I set a default priority — let me know if you'd like to change it."
 }`;
 
   const data = await groq(prompt);
