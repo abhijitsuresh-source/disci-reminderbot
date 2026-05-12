@@ -630,6 +630,12 @@ async function handleNewReminder(text, imageData = null) {
       return;
     }
 
+    // If the model wasn't confident this is a real reminder request, don't hallucinate one
+    if (parsed.confident === false) {
+      await botSay("I'm not sure what you'd like me to remind you about. Try something like:\n\n<i>\"Remind me to take medicine at 4pm\"</i>\nor\n<i>\"Exam on June 20th\"</i>");
+      return;
+    }
+
     // If deadline is null but title is there, use 7 days from now as fallback
     if (!parsed.deadline && parsed.title) {
       const fallback = new Date();
