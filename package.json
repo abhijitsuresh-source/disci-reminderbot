@@ -1,0 +1,12 @@
+{
+  "name": "disci",
+  "version": "1.0.0",
+  "description": "Smart reminders with AI-powered nudges",
+  "private": true,
+  "dependencies": {
+    "web-push": "^3.6.6"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
