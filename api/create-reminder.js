@@ -33,6 +33,8 @@ export default async function handler(req, res) {
           reminder_id: reminderId,
           user_id,
           scheduled_for: date.toISOString(),
+          notification_number: idx + 1,
+          total_notifications: schedule.length,
           sent: false
         }))
       });
@@ -53,77 +55,91 @@ export default async function handler(req, res) {
 function calculateSchedule(priority, totalDays, now, deadlineDate) {
   const dates = [];
 
-  // Same-day reminder: escalating frequency based on priority
+  // ── ALWAYS: 5-minute-before notification for ALL priorities ──────────────
+  const fiveMinBefore = addMinutes(deadlineDate, -5);
+
+  // ── SAME-DAY: spacing based on minutes available until event ─────────────
+  const minutesUntilEvent = Math.floor((deadlineDate - now) / 60000);
+
   if (totalDays === 0) {
-    const t = new Date(deadlineDate); // exact reminder time
+    const t = new Date(deadlineDate);
 
     if (priority >= 9) {
-      // P9-10: 8 nudges — 4h, 2h, 1h, 30m, 15m, 10m, 5m, at time
-      dates.push(addMinutes(t, -240));
-      dates.push(addMinutes(t, -120));
-      dates.push(addMinutes(t, -60));
-      dates.push(addMinutes(t, -30));
-      dates.push(addMinutes(t, -15));
-      dates.push(addMinutes(t, -10));
-      dates.push(addMinutes(t, -5));
-      dates.push(t);
+      // P9-10: up to 8 nudges, scaled to available time
+      if (minutesUntilEvent >= 240) dates.push(addMinutes(t, -240));
+      if (minutesUntilEvent >= 120) dates.push(addMinutes(t, -120));
+      if (minutesUntilEvent >= 60)  dates.push(addMinutes(t, -60));
+      if (minutesUntilEvent >= 30)  dates.push(addMinutes(t, -30));
+      if (minutesUntilEvent >= 15)  dates.push(addMinutes(t, -15));
+      if (minutesUntilEvent >= 10)  dates.push(addMinutes(t, -10));
     } else if (priority >= 7) {
-      // P7-8: 5 nudges — 2h, 1h, 30m, 10m, at time
-      dates.push(addMinutes(t, -120));
-      dates.push(addMinutes(t, -60));
-      dates.push(addMinutes(t, -30));
-      dates.push(addMinutes(t, -10));
-      dates.push(t);
+      // P7-8: up to 4 nudges
+      if (minutesUntilEvent >= 120) dates.push(addMinutes(t, -120));
+      if (minutesUntilEvent >= 60)  dates.push(addMinutes(t, -60));
+      if (minutesUntilEvent >= 30)  dates.push(addMinutes(t, -30));
     } else if (priority >= 5) {
-      // P5-6: 3 nudges — 1h, 15m, at time
-      dates.push(addMinutes(t, -60));
-      dates.push(addMinutes(t, -15));
-      dates.push(t);
+      // P5-6: up to 2 nudges
+      if (minutesUntilEvent >= 60)  dates.push(addMinutes(t, -60));
+      if (minutesUntilEvent >= 15)  dates.push(addMinutes(t, -15));
     } else if (priority >= 3) {
-      // P3-4: 2 nudges — 30m, at time
-      dates.push(addMinutes(t, -30));
-      dates.push(t);
-    } else {
-      // P1-2: just at the time
-      dates.push(t);
+      // P3-4: 1 nudge
+      if (minutesUntilEvent >= 30)  dates.push(addMinutes(t, -30));
     }
+    // P1-2: only the 5-min + at-time nudge (added below)
+
+    // Always add 5-min-before and at-time
+    dates.push(fiveMinBefore);
+    dates.push(t);
 
     const unique = [...new Set(dates.map(d => d.toISOString()))].map(d => new Date(d));
     return unique.filter(d => d > now).sort((a, b) => a - b);
   }
 
+  // ── MULTI-DAY: spacing proportional to gap ────────────────────────────────
   if (priority >= 9) {
     dates.push(addHours(now, 1));
     if (totalDays > 14) {
-      for (let d = 3; d <= totalDays - 14; d += 2) dates.push(addDays(now, d));
+      // Space every-2-days nudges evenly across the non-final window
+      for (let d = 2; d <= totalDays - 14; d += 2) dates.push(addDays(now, d));
     }
     const finalStart = Math.max(totalDays - 14, 1);
     for (let d = finalStart; d <= totalDays; d++) dates.push(addDays(now, d));
 
   } else if (priority >= 7) {
     if (totalDays >= 1) dates.push(addDays(now, 1));
-    if (totalDays >= 4) dates.push(addDays(now, 4));
     if (totalDays > 7) {
-      for (let d = 7; d <= totalDays - 7; d += 3) dates.push(addDays(now, d));
+      // Space bi-weekly nudges evenly across mid window
+      const midWindow = totalDays - 7;
+      const step = Math.max(3, Math.floor(midWindow / 4));
+      for (let d = Math.ceil(midWindow / 4); d <= midWindow; d += step) dates.push(addDays(now, d));
     }
     const finalStart = Math.max(totalDays - 7, 2);
     for (let d = finalStart; d <= totalDays; d++) dates.push(addDays(now, d));
 
   } else if (priority >= 5) {
-    if (totalDays >= 14) dates.push(addDays(now, totalDays - 14));
-    if (totalDays >= 7) dates.push(addDays(now, totalDays - 7));
-    if (totalDays >= 3) dates.push(addDays(now, totalDays - 3));
-    if (totalDays >= 1) dates.push(addDays(now, totalDays - 1));
-    dates.push(addDays(now, totalDays));
+    // 4-5 total, evenly spaced across the full window
+    const slots = [
+      totalDays >= 14 ? totalDays - 14 : null,
+      totalDays >= 7  ? totalDays - 7  : null,
+      totalDays >= 3  ? totalDays - 3  : null,
+      totalDays >= 1  ? totalDays - 1  : null,
+      totalDays
+    ];
+    slots.forEach(d => d !== null && dates.push(addDays(now, d)));
 
   } else if (priority >= 3) {
+    // 2-3 total
     if (totalDays >= 4) dates.push(addDays(now, Math.floor(totalDays / 2)));
-    if (totalDays >= 2) dates.push(addDays(now, totalDays - 2));
+    if (totalDays >= 2) dates.push(addDays(now, totalDays - 1));
     dates.push(addDays(now, totalDays));
 
   } else {
+    // P1-2: single reminder on the day
     dates.push(addDays(now, totalDays));
   }
+
+  // Always add 5-minute-before notification for multi-day reminders too
+  if (fiveMinBefore > now) dates.push(fiveMinBefore);
 
   const unique = [...new Set(dates.map(d => d.toISOString()))].map(d => new Date(d));
   return unique.filter(d => d > now).sort((a, b) => a - b);
